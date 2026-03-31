@@ -1,0 +1,7 @@
+numpy
+tensorflow
+joblib
+ipykernel
+scikit-learn
+pytz
+python-dotenv
