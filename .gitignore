@@ -1,2 +1,22 @@
-.venv
+.venv/
 .env
+
+# Python caches and bytecode
+__pycache__/
+*.py[cod]
+
+# Test and type-checker caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Editor settings
+.vscode/
+.idea/
+
+# OS artifacts
+.DS_Store
+Thumbs.db

@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: anomaly-detection-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: anomaly_detection
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - anomaly-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anomaly-detection-api
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/anomaly_detection
+      - WINDOW_SIZE=${WINDOW_SIZE:-10}
+      - THRESHOLD_COUNT=${THRESHOLD_COUNT:-8}
+      - CONSECUTIVE_THRESHOLD=${CONSECUTIVE_THRESHOLD:-3}
+      - REQUIRE_CONSECUTIVE=${REQUIRE_CONSECUTIVE:-false}
+      - HEATER_LIMIT=${HEATER_LIMIT:-}
+      - PUMP_LIMIT=${PUMP_LIMIT:-}
+      - MOTOR_LIMIT=${MOTOR_LIMIT:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./utils:/app/utils:ro  # Mount model files as read-only
+    networks:
+      - anomaly-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  anomaly-network:
+    driver: bridge
