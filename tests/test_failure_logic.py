@@ -1,26 +1,24 @@
 """Tests for failure detection logic."""
 
-import pytest
 from datetime import datetime, timedelta
 
-from app.services.failure_logic import FailureDetectionService
 from app.db.models import Prediction
+from app.services.failure_logic import FailureDetectionService
 
 
 def create_mock_prediction(
     auid: str,
     timestamp: datetime,
     anomaly_detected: bool,
-    failing_parts: list = None
+    failing_parts: list | None = None,
 ) -> Prediction:
     """Create a mock Prediction object for testing."""
-    pred = Prediction(
+    return Prediction(
         auid=auid,
         timestamp=timestamp,
         anomaly_detected=anomaly_detected,
         failing_parts=failing_parts or [],
     )
-    return pred
 
 
 def test_threshold_strategy_triggers_failure():
@@ -31,25 +29,21 @@ def test_threshold_strategy_triggers_failure():
         consecutive_threshold=3,
         require_consecutive=False,
     )
-    
-    # Create 10 predictions with 8 anomalies
+
     base_time = datetime.now()
     predictions = []
     for i in range(10):
-        # First 8 are anomalies, last 2 are normal
-        is_anomaly = i < 8
-        pred = create_mock_prediction(
-            auid="test_auid",
-            timestamp=base_time - timedelta(hours=9-i),
-            anomaly_detected=is_anomaly,
+        predictions.append(
+            create_mock_prediction(
+                auid="test_auid",
+                timestamp=base_time - timedelta(hours=9 - i),
+                anomaly_detected=i < 8,
+            )
         )
-        predictions.append(pred)
-    
-    # Reverse to simulate DESC order from DB
+
     predictions.reverse()
-    
     result = service.evaluate_failure(predictions)
-    
+
     assert result["failure_imminent"] is True
     assert result["anomaly_count"] == 8
     assert result["total_records"] == 10
@@ -63,23 +57,21 @@ def test_threshold_strategy_no_failure():
         consecutive_threshold=3,
         require_consecutive=False,
     )
-    
-    # Create 10 predictions with only 5 anomalies
+
     base_time = datetime.now()
     predictions = []
     for i in range(10):
-        is_anomaly = i < 5
-        pred = create_mock_prediction(
-            auid="test_auid",
-            timestamp=base_time - timedelta(hours=9-i),
-            anomaly_detected=is_anomaly,
+        predictions.append(
+            create_mock_prediction(
+                auid="test_auid",
+                timestamp=base_time - timedelta(hours=9 - i),
+                anomaly_detected=i < 5,
+            )
         )
-        predictions.append(pred)
-    
+
     predictions.reverse()
-    
     result = service.evaluate_failure(predictions)
-    
+
     assert result["failure_imminent"] is False
     assert result["anomaly_count"] == 5
 
@@ -92,23 +84,21 @@ def test_consecutive_strategy_triggers_failure():
         consecutive_threshold=3,
         require_consecutive=True,
     )
-    
-    # Create predictions with 3 consecutive anomalies in the most recent records
+
     base_time = datetime.now()
     predictions = []
     for i in range(10):
-        is_anomaly = i >= 7
-        pred = create_mock_prediction(
-            auid="test_auid",
-            timestamp=base_time - timedelta(hours=9-i),
-            anomaly_detected=is_anomaly,
+        predictions.append(
+            create_mock_prediction(
+                auid="test_auid",
+                timestamp=base_time - timedelta(hours=9 - i),
+                anomaly_detected=i >= 7,
+            )
         )
-        predictions.append(pred)
-    
+
     predictions.reverse()
-    
     result = service.evaluate_failure(predictions)
-    
+
     assert result["failure_imminent"] is True
     assert result["consecutive_anomalies"] == 3
 
@@ -121,26 +111,95 @@ def test_consecutive_strategy_no_failure():
         consecutive_threshold=3,
         require_consecutive=True,
     )
-    
-    # Create predictions with anomalies but not consecutive
+
     base_time = datetime.now()
     predictions = []
     for i in range(10):
-        # Alternating pattern with the most recent record as an anomaly
-        is_anomaly = i % 2 == 1
-        pred = create_mock_prediction(
-            auid="test_auid",
-            timestamp=base_time - timedelta(hours=9-i),
-            anomaly_detected=is_anomaly,
+        predictions.append(
+            create_mock_prediction(
+                auid="test_auid",
+                timestamp=base_time - timedelta(hours=9 - i),
+                anomaly_detected=i % 2 == 1,
+            )
         )
-        predictions.append(pred)
-    
+
     predictions.reverse()
-    
     result = service.evaluate_failure(predictions)
-    
+
     assert result["failure_imminent"] is False
-    assert result["consecutive_anomalies"] == 1  # Only 1 consecutive (most recent)
+    assert result["consecutive_anomalies"] == 1
+
+
+def test_component_threshold_strategy_triggers_failure():
+    """Test threshold-based failure evaluation for a single component."""
+    service = FailureDetectionService(
+        window_size=10,
+        threshold_count=3,
+        consecutive_threshold=2,
+        require_consecutive=False,
+    )
+
+    base_time = datetime.now()
+    predictions = [
+        create_mock_prediction("test", base_time - timedelta(hours=3), True, ["heater"]),
+        create_mock_prediction("test", base_time - timedelta(hours=2), True, ["heater"]),
+        create_mock_prediction("test", base_time - timedelta(hours=1), True, ["heater"]),
+        create_mock_prediction("test", base_time, False, []),
+    ]
+
+    predictions.reverse()
+    result = service.evaluate_component_failures(predictions)
+
+    assert result["heater"]["failure_imminent"] is True
+    assert result["pump"]["failure_imminent"] is False
+    assert result["motor"]["failure_imminent"] is False
+
+
+def test_component_consecutive_strategy_triggers_failure():
+    """Test consecutive failure evaluation for a single component."""
+    service = FailureDetectionService(
+        window_size=10,
+        threshold_count=8,
+        consecutive_threshold=2,
+        require_consecutive=True,
+    )
+
+    base_time = datetime.now()
+    predictions = [
+        create_mock_prediction("test", base_time - timedelta(hours=2), False, []),
+        create_mock_prediction("test", base_time - timedelta(hours=1), True, ["pump"]),
+        create_mock_prediction("test", base_time, True, ["pump"]),
+    ]
+
+    predictions.reverse()
+    result = service.evaluate_component_failures(predictions)
+
+    assert result["pump"]["failure_imminent"] is True
+    assert result["pump"]["consecutive_anomalies"] == 2
+
+
+def test_component_mixed_history_keeps_red_and_yellow_separate():
+    """Test mixed component history where one component can fail while another does not."""
+    service = FailureDetectionService(
+        window_size=10,
+        threshold_count=2,
+        consecutive_threshold=2,
+        require_consecutive=False,
+    )
+
+    base_time = datetime.now()
+    predictions = [
+        create_mock_prediction("test", base_time - timedelta(hours=2), True, ["heater"]),
+        create_mock_prediction("test", base_time - timedelta(hours=1), True, ["heater"]),
+        create_mock_prediction("test", base_time, True, ["motor"]),
+    ]
+
+    predictions.reverse()
+    result = service.evaluate_component_failures(predictions)
+
+    assert result["heater"]["failure_imminent"] is True
+    assert result["motor"]["failure_imminent"] is False
+    assert result["pump"]["failure_imminent"] is False
 
 
 def test_sparse_history():
@@ -151,23 +210,24 @@ def test_sparse_history():
         consecutive_threshold=3,
         require_consecutive=False,
     )
-    
-    # Only 3 predictions, all anomalies
+
     base_time = datetime.now()
     predictions = [
-        create_mock_prediction("test", base_time - timedelta(hours=2), True),
-        create_mock_prediction("test", base_time - timedelta(hours=1), True),
-        create_mock_prediction("test", base_time, True),
+        create_mock_prediction("test", base_time - timedelta(hours=2), True, ["heater"]),
+        create_mock_prediction("test", base_time - timedelta(hours=1), True, ["pump"]),
+        create_mock_prediction("test", base_time, True, ["motor"]),
     ]
-    
+
     predictions.reverse()
-    
     result = service.evaluate_failure(predictions)
-    
-    # Should use available history (3 anomalies < 8 threshold)
+    component_result = service.evaluate_component_failures(predictions)
+
     assert result["failure_imminent"] is False
     assert result["total_records"] == 3
     assert result["anomaly_count"] == 3
+    assert component_result["heater"]["failure_imminent"] is False
+    assert component_result["pump"]["failure_imminent"] is False
+    assert component_result["motor"]["failure_imminent"] is False
 
 
 def test_empty_history():
@@ -178,10 +238,14 @@ def test_empty_history():
         consecutive_threshold=3,
         require_consecutive=False,
     )
-    
+
     result = service.evaluate_failure([])
-    
+    component_result = service.evaluate_component_failures([])
+
     assert result["failure_imminent"] is False
     assert result["total_records"] == 0
     assert result["anomaly_count"] == 0
     assert result["consecutive_anomalies"] == 0
+    assert component_result["heater"]["failure_imminent"] is False
+    assert component_result["pump"]["failure_imminent"] is False
+    assert component_result["motor"]["failure_imminent"] is False

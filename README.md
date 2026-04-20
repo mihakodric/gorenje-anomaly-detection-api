@@ -32,9 +32,17 @@ curl -X POST http://localhost:8000/detect_anomaly \
   "anomaly_detected": true,
   "failure_imminent": false,
   "failing_parts": ["pump"],
-  "auid": "0000000000007442320000202400044930020"
+  "auid": "0000000000007442320000202400044930020",
+  "components": {
+    "heater": { "status": "ok", "color": "#669900" },
+    "pump": { "status": "warning", "color": "#FFCC00" },
+    "motor": { "status": "ok", "color": "#669900" }
+  },
+  "wm_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" ...></svg>"
 }
 ```
+
+The response also includes `wm_svg`, which can be rendered directly on the frontend. See [API_README.md](API_README.md) for the correct integration examples.
 
 **Debug Mode** (detailed predictions + history):
 ```bash
@@ -86,4 +94,4 @@ docker-compose down
 docker logs anomaly-detection-api
 ```
 
-See [API_README.md](API_README.md) for detailed documentation.
+See [API_README.md](API_README.md) for detailed documentation, response fields, and frontend integration examples for `wm_svg`.

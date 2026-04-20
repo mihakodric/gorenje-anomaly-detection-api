@@ -2,7 +2,7 @@
 
 This is a **production-ready FastAPI service** that exposes ML models for anomaly detection and failure prediction for washing machine cycles, with persistent prediction history.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Using Docker
 
@@ -21,7 +21,7 @@ This is a **production-ready FastAPI service** that exposes ML models for anomal
    - Swagger Docs: http://localhost:8000/docs
    - Health Check: http://localhost:8000/health
 
-## 📡 API Endpoints
+## API Endpoints
 
 ### POST `/detect_anomaly`
 
@@ -43,7 +43,22 @@ Detect anomalies and predict failures for washing machine cycle data.
   "anomaly_detected": true,
   "failure_imminent": true,
   "failing_parts": ["heater"],
-  "auid": "string"
+  "auid": "string",
+  "components": {
+    "heater": {
+      "status": "failing",
+      "color": "#CC0000"
+    },
+    "pump": {
+      "status": "ok",
+      "color": "#669900"
+    },
+    "motor": {
+      "status": "warning",
+      "color": "#FFCC00"
+    }
+  },
+  "wm_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" ...></svg>"
 }
 ```
 
@@ -54,6 +69,21 @@ Detect anomalies and predict failures for washing machine cycle data.
   "failure_imminent": true,
   "failing_parts": ["heater"],
   "auid": "string",
+  "components": {
+    "heater": {
+      "status": "failing",
+      "color": "#CC0000"
+    },
+    "pump": {
+      "status": "ok",
+      "color": "#669900"
+    },
+    "motor": {
+      "status": "warning",
+      "color": "#FFCC00"
+    }
+  },
+  "wm_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" ...></svg>",
   "predictions": {
     "heater": { ... },
     "pump": { ... },
@@ -62,6 +92,65 @@ Detect anomalies and predict failures for washing machine cycle data.
   "history": { ... }
 }
 ```
+
+### Component Status and SVG Fields
+
+The `/detect_anomaly` response contains two frontend-oriented fields:
+
+- `components`: per-component display state for `heater`, `pump`, and `motor`
+- `wm_svg`: washing machine SVG text with those colors already applied
+
+Component color rules:
+
+- `ok` -> `#669900`
+- `warning` -> `#FFCC00`
+- `failing` -> `#CC0000`
+
+### How to Use `wm_svg` on the Frontend
+
+`wm_svg` is returned as a JSON string. In raw JSON you will see escaped quotes such as `\"`. This is normal JSON escaping. After JSON parsing, the value is a normal SVG string.
+
+Use it like this:
+
+```js
+const response = await fetch("/detect_anomaly", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload),
+});
+
+const data = await response.json();
+document.getElementById("wm-container").innerHTML = data.wm_svg;
+```
+
+```html
+<div id="wm-container"></div>
+```
+
+You can also display it in an `<img>` tag:
+
+```js
+const response = await fetch("/detect_anomaly", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload),
+});
+
+const data = await response.json();
+const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(data.wm_svg)}`;
+document.getElementById("wm-image").src = svgUrl;
+```
+
+```html
+<img id="wm-image" alt="Washing machine status" />
+```
+
+Important integration notes:
+
+- Read the response with `response.json()`
+- Use `data.wm_svg`, not the raw response body text
+- Do not manually copy the escaped `\"` characters into a file
+- If using `<img src=...>`, always wrap the SVG with `encodeURIComponent(...)`
 
 ### GET `/health`
 
@@ -77,7 +166,7 @@ Health check endpoint for monitoring.
 
 Use Swagger UI at `http://localhost:8000/docs` for interactive request examples.
 
-## 🧠 How It Works
+## How It Works
 
 ### 1. ML Inference
 - Runs Keras models for **heater**, **pump**, and **motor** components
@@ -98,7 +187,7 @@ Configurable strategies via `.env`:
 **Consecutive Strategy** (`REQUIRE_CONSECUTIVE=true`):
 - If ≥ `CONSECUTIVE_THRESHOLD` consecutive anomalies → `failure_imminent=true`
 
-## ⚙️ Configuration
+## Configuration
 
 All settings in `.env` file:
 
@@ -113,7 +202,7 @@ All settings in `.env` file:
 | `PUMP_LIMIT` | _(auto)_ | Pump anomaly threshold (optional) |
 | `MOTOR_LIMIT` | _(auto)_ | Motor anomaly threshold (optional) |
 
-## 🗂️ Project Structure
+## Project Structure
 
 ```
 gorenje-anomaly-detection-api/
@@ -148,7 +237,7 @@ gorenje-anomaly-detection-api/
 ├── .env.example
 ```
 
-## 🧪 Testing
+## Testing
 
 ### Run Tests
 ```bash
@@ -173,7 +262,7 @@ done
 
 The 8th request should trigger `failure_imminent=true` (with default config).
 
-## 🐳 Docker Commands
+## Docker Commands
 
 ```bash
 # Build and start
@@ -192,13 +281,13 @@ docker-compose down
 docker-compose down -v
 ```
 
-##  Monitoring
+## Monitoring
 
 - **Health Check**: `GET /health`
 - **Logs**: Check `docker-compose logs -f api`
 - **Database**: Connect to PostgreSQL on `localhost:5432`
 
-## 🔒 Production Considerations
+## Production Considerations
 
 1. **Environment Variables**: Never commit `.env` file
 2. **Database**: Use managed PostgreSQL (Azure, AWS RDS) in production
@@ -208,13 +297,13 @@ docker-compose down -v
 6. **Monitoring**: Integrate with Prometheus/Grafana
 7. **Logging**: Configure structured logging (JSON format)
 
-## 📝 Migration from CLI
+## Migration from CLI
 
 Original CLI tool (`main.py`) is preserved. The API wraps the same ML logic:
 - `utils/model.py` - Original HealthCheck class
 - `app/services/inference.py` - API-adapted inference service
 
-## 📮 API Documentation
+## API Documentation
 
 Interactive API docs available at:
 - **Swagger UI**: http://localhost:8000/docs

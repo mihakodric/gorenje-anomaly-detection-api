@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     heater_limit: Optional[float] = None
     pump_limit: Optional[float] = None
     motor_limit: Optional[float] = None
+
+    # Component display colors
+    component_ok_color: str = "#669900"
+    component_warning_color: str = "#FFCC00"
+    component_failing_color: str = "#CC0000"
     
     # API settings
     api_title: str = "Washing Machine Anomaly Detection API"
