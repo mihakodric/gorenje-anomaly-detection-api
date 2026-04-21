@@ -1,5 +1,6 @@
 """Response schemas for API endpoints."""
 
+from datetime import datetime
 from typing import List, Literal
 
 from pydantic import BaseModel, Field
@@ -147,6 +148,52 @@ class AnomalyDetectionDebugResponse(AnomalyDetectionResponse):
                         "consecutive_threshold": 3,
                         "require_consecutive": False,
                     },
+                }
+            ]
+        }
+    }
+
+
+class AvailableAuidsResponse(BaseModel):
+    """Response for listing AUIDs that have stored predictions."""
+
+    auids: List[str] = Field(
+        ...,
+        description="Distinct appliance identifiers with at least one stored prediction",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "auids": [
+                        "0000000000007442320000202400044930020",
+                        "0000000000007442320000202400044930021",
+                    ]
+                }
+            ]
+        }
+    }
+
+
+class LatestPredictionResponse(BaseModel):
+    """Response for the most recent stored prediction of one AUID."""
+
+    id: int = Field(..., description="Stored prediction record identifier")
+    auid: str = Field(..., description="Appliance unique identifier")
+    timestamp: datetime = Field(..., description="Timestamp of the stored prediction")
+    anomaly_detected: bool = Field(..., description="Whether the stored cycle was anomalous")
+    failing_parts: List[str] = Field(..., description="Failing components detected for that cycle")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "id": 42,
+                    "auid": "0000000000007442320000202400044930020",
+                    "timestamp": "2026-03-31T10:15:00Z",
+                    "anomaly_detected": True,
+                    "failing_parts": ["heater"],
                 }
             ]
         }

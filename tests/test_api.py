@@ -1,12 +1,15 @@
 """Basic tests for the API endpoints."""
 
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
 from httpx import AsyncClient
 
-from app.main import app
 import app.api.routes as routes
+from app.db.crud import create_prediction
+from app.db.database import AsyncSessionLocal
+from app.main import app
 
 
 VALID_REQUEST_DATA = {
@@ -186,6 +189,88 @@ async def test_root_endpoint():
     data = response.json()
     assert "message" in data
     assert "version" in data
+
+
+@pytest.mark.asyncio
+async def test_list_prediction_auids():
+    """Test listing distinct AUIDs with stored predictions."""
+    async with AsyncSessionLocal() as session:
+        await create_prediction(
+            db=session,
+            auid="auid-b",
+            timestamp=datetime(2026, 3, 31, 10, 15, tzinfo=timezone.utc),
+            anomaly_detected=False,
+            failing_parts=[],
+        )
+        await create_prediction(
+            db=session,
+            auid="auid-a",
+            timestamp=datetime(2026, 3, 31, 11, 15, tzinfo=timezone.utc),
+            anomaly_detected=True,
+            failing_parts=["heater"],
+        )
+        await create_prediction(
+            db=session,
+            auid="auid-a",
+            timestamp=datetime(2026, 3, 31, 12, 15, tzinfo=timezone.utc),
+            anomaly_detected=False,
+            failing_parts=[],
+        )
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.get("/predictions/auids")
+
+    assert response.status_code == 200
+    assert response.json() == {"auids": ["auid-a", "auid-b"]}
+
+
+@pytest.mark.asyncio
+async def test_get_latest_prediction_by_auid():
+    """Test retrieving the newest stored prediction for one AUID."""
+    async with AsyncSessionLocal() as session:
+        await create_prediction(
+            db=session,
+            auid="target-auid",
+            timestamp=datetime(2026, 3, 31, 10, 15, tzinfo=timezone.utc),
+            anomaly_detected=False,
+            failing_parts=[],
+        )
+        await create_prediction(
+            db=session,
+            auid="target-auid",
+            timestamp=datetime(2026, 3, 31, 11, 15, tzinfo=timezone.utc),
+            anomaly_detected=True,
+            failing_parts=["pump"],
+        )
+        await create_prediction(
+            db=session,
+            auid="other-auid",
+            timestamp=datetime(2026, 3, 31, 12, 15, tzinfo=timezone.utc),
+            anomaly_detected=True,
+            failing_parts=["motor"],
+        )
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.get("/predictions/target-auid/latest")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["auid"] == "target-auid"
+    assert data["anomaly_detected"] is True
+    assert data["failing_parts"] == ["pump"]
+    assert data["timestamp"] == "2026-03-31T11:15:00Z"
+
+
+@pytest.mark.asyncio
+async def test_get_latest_prediction_by_auid_not_found():
+    """Test retrieving latest prediction for an unknown AUID."""
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        response = await client.get("/predictions/missing-auid/latest")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": "No stored predictions found for auid 'missing-auid'"
+    }
 
 
 @pytest.mark.asyncio

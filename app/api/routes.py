@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Union
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import __version__
@@ -12,6 +12,7 @@ from app.db import crud
 from app.db.database import get_db
 from app.schemas.request import AnomalyDetectionRequest
 from app.schemas.response import (
+    AvailableAuidsResponse,
     AnomalyDetectionDebugResponse,
     AnomalyDetectionResponse,
     ComponentPrediction,
@@ -19,6 +20,7 @@ from app.schemas.response import (
     ComponentStatusMap,
     HealthCheckResponse,
     HistoricalSummary,
+    LatestPredictionResponse,
     PredictionDetails,
 )
 from app.services.failure_logic import get_failure_detection_service
@@ -34,6 +36,45 @@ COMPONENT_NAMES = ("heater", "pump", "motor")
 async def health_check() -> HealthCheckResponse:
     """Health check endpoint for container orchestration."""
     return HealthCheckResponse(status="healthy", version=__version__)
+
+
+@router.get(
+    "/predictions/auids",
+    response_model=AvailableAuidsResponse,
+    tags=["Predictions"],
+)
+async def list_prediction_auids(
+    db: AsyncSession = Depends(get_db),
+) -> AvailableAuidsResponse:
+    """List all AUIDs that have at least one stored prediction."""
+    auids = await crud.get_all_auids_with_predictions(db=db)
+    return AvailableAuidsResponse(auids=auids)
+
+
+@router.get(
+    "/predictions/{auid}/latest",
+    response_model=LatestPredictionResponse,
+    tags=["Predictions"],
+)
+async def get_latest_prediction(
+    auid: str,
+    db: AsyncSession = Depends(get_db),
+) -> LatestPredictionResponse:
+    """Return the most recent stored prediction for the provided AUID."""
+    latest_prediction = await crud.get_latest_prediction_by_auid(db=db, auid=auid)
+    if latest_prediction is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No stored predictions found for auid '{auid}'",
+        )
+
+    return LatestPredictionResponse(
+        id=latest_prediction.id,
+        auid=latest_prediction.auid,
+        timestamp=latest_prediction.timestamp,
+        anomaly_detected=latest_prediction.anomaly_detected,
+        failing_parts=latest_prediction.failing_parts,
+    )
 
 
 @router.post(

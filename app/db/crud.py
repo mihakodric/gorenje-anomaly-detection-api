@@ -66,6 +66,28 @@ async def get_last_n_predictions(
     return list(predictions)
 
 
+async def get_all_auids_with_predictions(db: AsyncSession) -> List[str]:
+    """Retrieve all distinct AUIDs that have at least one stored prediction."""
+    stmt = select(Prediction.auid).distinct().order_by(Prediction.auid.asc())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_latest_prediction_by_auid(
+    db: AsyncSession,
+    auid: str,
+) -> Optional[Prediction]:
+    """Retrieve the most recent stored prediction for a given AUID."""
+    stmt = (
+        select(Prediction)
+        .where(Prediction.auid == auid)
+        .order_by(Prediction.timestamp.desc(), Prediction.id.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 async def get_prediction_by_id(
     db: AsyncSession,
     prediction_id: int,
