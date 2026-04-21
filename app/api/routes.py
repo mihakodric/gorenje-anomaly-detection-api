@@ -61,6 +61,7 @@ async def get_latest_prediction(
     db: AsyncSession = Depends(get_db),
 ) -> LatestPredictionResponse:
     """Return the most recent stored prediction for the provided AUID."""
+    failure_service = get_failure_detection_service()
     latest_prediction = await crud.get_latest_prediction_by_auid(db=db, auid=auid)
     if latest_prediction is None:
         raise HTTPException(
@@ -68,12 +69,31 @@ async def get_latest_prediction(
             detail=f"No stored predictions found for auid '{auid}'",
         )
 
+    historical_predictions = await crud.get_last_n_predictions(
+        db=db,
+        auid=auid,
+        n=failure_service.window_size,
+    )
+    component_failure_evaluation = failure_service.evaluate_component_failures(historical_predictions)
+    latest_prediction_result = {
+        "predictions": {
+            component_name: {
+                "is_anomaly": component_name in (latest_prediction.failing_parts or []),
+            }
+            for component_name in COMPONENT_NAMES
+        }
+    }
+
     return LatestPredictionResponse(
         id=latest_prediction.id,
         auid=latest_prediction.auid,
         timestamp=latest_prediction.timestamp,
         anomaly_detected=latest_prediction.anomaly_detected,
         failing_parts=latest_prediction.failing_parts,
+        components=_build_component_status_map(
+            prediction_result=latest_prediction_result,
+            component_failure_evaluation=component_failure_evaluation,
+        ),
     )
 
 

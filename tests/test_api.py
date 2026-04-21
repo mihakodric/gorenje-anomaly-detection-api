@@ -259,6 +259,9 @@ async def test_get_latest_prediction_by_auid():
     assert data["anomaly_detected"] is True
     assert data["failing_parts"] == ["pump"]
     assert data["timestamp"] == "2026-03-31T11:15:00Z"
+    assert data["components"]["heater"] == {"status": "ok", "color": "#669900"}
+    assert data["components"]["pump"] == {"status": "warning", "color": "#FFCC00"}
+    assert data["components"]["motor"] == {"status": "ok", "color": "#669900"}
 
 
 @pytest.mark.asyncio

@@ -184,6 +184,7 @@ class LatestPredictionResponse(BaseModel):
     timestamp: datetime = Field(..., description="Timestamp of the stored prediction")
     anomaly_detected: bool = Field(..., description="Whether the stored cycle was anomalous")
     failing_parts: List[str] = Field(..., description="Failing components detected for that cycle")
+    components: ComponentStatusMap = Field(..., description="Resolved per-component UI status and color")
 
     model_config = {
         "json_schema_extra": {
@@ -194,6 +195,11 @@ class LatestPredictionResponse(BaseModel):
                     "timestamp": "2026-03-31T10:15:00Z",
                     "anomaly_detected": True,
                     "failing_parts": ["heater"],
+                    "components": {
+                        "heater": {"status": "warning", "color": "#FFCC00"},
+                        "pump": {"status": "ok", "color": "#669900"},
+                        "motor": {"status": "ok", "color": "#669900"},
+                    },
                 }
             ]
         }
